@@ -1,3 +1,4 @@
+#!/usr/bin/swift
 //
 //  main.swift
 //  playmidi-swift
@@ -6,24 +7,15 @@
 //
 
 import Foundation
-import ArgumentParser
 import AudioToolbox
 
-struct PlayMIDI: ParsableCommand {
-    
-    static var configuration = CommandConfiguration(
-        commandName: "playmidi",
-        abstract: "A utility to play MIDI files from the command line. Supports CoreMIDI devices.",
-        version: "1.0.0"
-    )
-    
-    @Argument(help: "The MIDI file to play.", completion: .file(extensions: [".mid", ".smf"]))
+struct PlayMIDI {
+
     var file: String
     
-    @Option(name: [.customShort("d"), .long], help: "The CoreMIDI device number to send MIDI data to. If you do not provide a device number, the built-in software synthesizer will be used.")
     var deviceNumber: Int?
     
-    enum ResetType: String, ExpressibleByArgument {
+    enum ResetType: String {
         case gm
         case gs
         case mt
@@ -31,10 +23,8 @@ struct PlayMIDI: ParsableCommand {
         case none
     }
     
-    @Option(name: [.customShort("r"), .long], help: "The type of MIDI reset message to send before playback begins. Valid types are gm (General MIDI), gs (Roland GS), mt (Roland MT-32), xg (Yamaha XG), and none. (default: none)")
     var resetType: ResetType?
     
-    @Option(name: [.customShort("t"), .long], help: "The tempo to play the MIDI file at. (default: 1.0)")
     var tempo: Double?
     
     func run() throws {
@@ -46,14 +36,14 @@ struct PlayMIDI: ParsableCommand {
             print(file)
         } else {
             print("E: File \(file) does not exist or you do not have sufficient permissions to read it.")
-            PlayMIDI.exit(withError: nil)
+            exit(1)
         }
         
         var ms: MusicSequence? = nil
         NewMusicSequence(&ms)
         guard let ms = ms else {
             print("E: Error creating MusicSequence")
-            PlayMIDI.exit(withError: nil)
+            exit(1)
         }
         MusicSequenceFileLoad(ms, url as CFURL, .midiType, .smf_ChannelsToTracks)
         
@@ -111,7 +101,7 @@ struct PlayMIDI: ParsableCommand {
         NewMusicPlayer(&mp)
         guard let mp = mp else {
             print("E: Error creating MusicPlayer")
-            PlayMIDI.exit(withError: nil)
+            exit(1)
         }
         MusicPlayerSetSequence(mp, ms)
         
@@ -177,5 +167,27 @@ func sendSysex(_ bytes: [UInt8], to endpoint: MIDIEndpointRef) {
         }
     }
 }
-            
-PlayMIDI.main()
+
+do {
+    let arguments = CommandLine.arguments
+    var device:Int?
+    if(arguments.endIndex < 2) {
+        print("usage: " + arguments[0] + " -l")
+        print("usage: " + arguments[0] + " MIDIFILE [DEVICE]")
+        exit(0)
+    } else if(arguments[1] == "-l") {
+        let count: Int = MIDIGetNumberOfDestinations();
+        for i in 0..<count {
+            let endpoint: MIDIEndpointRef = MIDIGetDestination(i)
+            print(i, terminator: ": ")
+            print(GetEndpointDisplayName(endpoint: endpoint))
+            exit(0)
+        }
+    } else if(arguments.endIndex > 2) {
+        device = Int(arguments[2]) ?? 0
+    }
+    let player = PlayMIDI(file: arguments[1], deviceNumber: device)
+    try player.run()
+} catch {
+    print("error in playback")
+}
